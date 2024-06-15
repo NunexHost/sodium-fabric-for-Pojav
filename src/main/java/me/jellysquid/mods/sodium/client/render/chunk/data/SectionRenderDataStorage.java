@@ -5,10 +5,11 @@ import me.jellysquid.mods.sodium.client.gl.util.VertexRange;
 import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFacing;
 import me.jellysquid.mods.sodium.client.render.chunk.region.RenderRegion;
 
-import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 public class SectionRenderDataStorage {
-    private final GlBufferSegment[] allocations = new GlBufferSegment[RenderRegion.REGION_SIZE];
+    private final Map<Integer, GlBufferSegment> allocations = new HashMap<>();
 
     private final long pMeshDataArray;
 
@@ -18,12 +19,7 @@ public class SectionRenderDataStorage {
 
     public void setMeshes(int localSectionIndex,
                           GlBufferSegment allocation, VertexRange[] ranges) {
-        if (this.allocations[localSectionIndex] != null) {
-            this.allocations[localSectionIndex].delete();
-            this.allocations[localSectionIndex] = null;
-        }
-
-        this.allocations[localSectionIndex] = allocation;
+        this.allocations.put(localSectionIndex, allocation);
 
         var pMeshData = this.getDataPointer(localSectionIndex);
 
@@ -54,12 +50,11 @@ public class SectionRenderDataStorage {
     }
 
     public void removeMeshes(int localSectionIndex) {
-        if (this.allocations[localSectionIndex] == null) {
-            return;
-        }
+        GlBufferSegment allocation = this.allocations.remove(localSectionIndex);
 
-        this.allocations[localSectionIndex].delete();
-        this.allocations[localSectionIndex] = null;
+        if (allocation != null) {
+            allocation.delete();
+        }
 
         SectionRenderDataUnsafe.clear(this.getDataPointer(localSectionIndex));
     }
@@ -71,7 +66,7 @@ public class SectionRenderDataStorage {
     }
 
     private void updateMeshes(int sectionIndex) {
-        var allocation = this.allocations[sectionIndex];
+        GlBufferSegment allocation = this.allocations.get(sectionIndex);
 
         if (allocation == null) {
             return;
@@ -93,13 +88,13 @@ public class SectionRenderDataStorage {
     }
 
     public void delete() {
-        for (var allocation : this.allocations) {
+        for (var allocation : this.allocations.values()) {
             if (allocation != null) {
                 allocation.delete();
             }
         }
 
-        Arrays.fill(this.allocations, null);
+        this.allocations.clear();
 
         SectionRenderDataUnsafe.freeHeap(this.pMeshDataArray);
     }
