@@ -74,7 +74,7 @@ public class ChunkBuildBuffers {
                 continue;
             }
 
-            ensureCapacity(buffer, vertexCount + buffer.count()); // Ensure buffer has enough capacity
+          //  ensureCapacity(buffer, vertexCount + buffer.count()); // Ensure buffer has enough capacity
 
             vertexBuffers.add(buffer.slice());
             vertexRanges[facing.ordinal()] = new VertexRange(vertexCount, buffer.count());
