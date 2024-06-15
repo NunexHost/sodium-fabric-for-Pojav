@@ -1,25 +1,22 @@
-package net.caffeinemc.mods.sodium.client.render.chunk.compile;
+package me.jellysquid.mods.sodium.client.render.chunk.compile;
 
-import com.google.common.collect.Maps;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
-import net.caffeinemc.mods.sodium.client.gl.util.VertexRange;
-import net.caffeinemc.mods.sodium.client.model.quad.properties.ModelQuadFacing;
-import net.caffeinemc.mods.sodium.client.render.chunk.compile.buffers.BakedChunkModelBuilder;
-import net.caffeinemc.mods.sodium.client.render.chunk.compile.buffers.ChunkModelBuilder;
-import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
-import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionMeshParts;
-import net.caffeinemc.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
-import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
-import net.caffeinemc.mods.sodium.client.render.chunk.terrain.material.Material;
-import net.caffeinemc.mods.sodium.client.render.chunk.vertex.builder.ChunkMeshBufferBuilder;
-import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
-import net.caffeinemc.mods.sodium.client.util.MemoryMappedBuffer;
+import me.jellysquid.mods.sodium.client.gl.util.VertexRange;
+import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFacing;
+import me.jellysquid.mods.sodium.client.render.chunk.compile.buffers.BakedChunkModelBuilder;
+import me.jellysquid.mods.sodium.client.render.chunk.compile.buffers.ChunkMeshBufferBuilder;
+import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
+import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionMeshParts;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
+import me.jellysquid.mods.sodium.client.render.chunk.vertex.builder.ChunkMeshBufferBuilder;
+import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
+import me.jellysquid.mods.sodium.client.util.NativeBuffer;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A collection of temporary buffers for each worker thread which will be used to build chunk meshes for given render
@@ -27,9 +24,11 @@ import java.util.Map;
  * shrink a buffer.
  */
 public class ChunkBuildBuffers {
-    private final Map<TerrainRenderPass, BakedChunkModelBuilder> builders = Maps.newHashMap();
+    private final Reference2ReferenceOpenHashMap<TerrainRenderPass, BakedChunkModelBuilder> builders = new Reference2ReferenceOpenHashMap<>();
 
     private final ChunkVertexType vertexType;
+
+    private final int initialBufferSize = 32 * 1024; // Initial buffer size (adjust as needed)
 
     public ChunkBuildBuffers(ChunkVertexType vertexType) {
         this.vertexType = vertexType;
@@ -38,7 +37,7 @@ public class ChunkBuildBuffers {
             var vertexBuffers = new ChunkMeshBufferBuilder[ModelQuadFacing.COUNT];
 
             for (int facing = 0; facing < ModelQuadFacing.COUNT; facing++) {
-                vertexBuffers[facing] = new ChunkMeshBufferBuilder(this.vertexType, 128 * 1024);
+                vertexBuffers[facing] = new ChunkMeshBufferBuilder(this.vertexType, initialBufferSize);
             }
 
             this.builders.put(pass, new BakedChunkModelBuilder(vertexBuffers));
@@ -60,10 +59,10 @@ public class ChunkBuildBuffers {
      * have been rendered to pass the finished meshes over to the graphics card. This function can be called multiple
      * times to return multiple copies.
      */
-    public BuiltSectionMeshParts createMesh(TerrainRenderPass pass, boolean forceUnassigned) {
+    public BuiltSectionMeshParts createMesh(TerrainRenderPass pass) {
         var builder = this.builders.get(pass);
 
-        List<MemoryMappedBuffer> vertexBuffers = new ArrayList<>();
+        List<ByteBuffer> vertexBuffers = new ArrayList<>();
         VertexRange[] vertexRanges = new VertexRange[ModelQuadFacing.COUNT];
 
         int vertexCount = 0;
@@ -75,10 +74,10 @@ public class ChunkBuildBuffers {
                 continue;
             }
 
+            ensureCapacity(buffer, vertexCount + buffer.count()); // Ensure buffer has enough capacity
+
             vertexBuffers.add(buffer.slice());
-            if (!forceUnassigned) {
-                vertexRanges[facing.ordinal()] = new VertexRange(vertexCount, buffer.count());
-            }
+            vertexRanges[facing.ordinal()] = new VertexRange(vertexCount, buffer.count());
 
             vertexCount += buffer.count();
         }
@@ -87,11 +86,7 @@ public class ChunkBuildBuffers {
             return null;
         }
 
-        if (forceUnassigned) {
-            vertexRanges[ModelQuadFacing.UNASSIGNED.ordinal()] = new VertexRange(0, vertexCount);
-        }
-
-        var mergedBuffer = MemoryMappedBuffer.create(vertexCount * this.vertexType.getVertexFormat().getStride());
+        var mergedBuffer = new NativeBuffer(vertexCount * this.vertexType.getVertexFormat().getStride());
         var mergedBufferBuilder = mergedBuffer.getDirectBuffer();
 
         for (var buffer : vertexBuffers) {
@@ -101,6 +96,7 @@ public class ChunkBuildBuffers {
         mergedBufferBuilder.flip();
 
         return new BuiltSectionMeshParts(mergedBuffer, vertexRanges);
+
     }
 
     public void destroy() {
