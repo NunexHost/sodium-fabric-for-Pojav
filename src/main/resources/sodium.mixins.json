@@ -24,8 +24,6 @@
     "core.render.immediate.consumer.VertexConsumersMixin$DualMixin",
     "core.render.immediate.consumer.VertexConsumersMixin$UnionMixin",
     "core.render.world.BufferBuilderStorageMixin",
-    "core.render.world.WorldRendererMixin",
-    "core.world.biome.ClientWorldMixin",
     "core.world.chunk.EmptyPaletteStorageMixin",
     "core.world.chunk.PackedIntegerArrayMixin",
     "core.world.chunk.PalettedContainerMixin",
@@ -82,7 +80,6 @@
     "features.textures.mipmaps.SpriteContentsMixin",
     "features.world.biome.BiomeMixin",
     "features.world.storage.ClientChunkMapMixin",
-    "workarounds.context_creation.WindowMixin",
-    "workarounds.event_loop.RenderSystemMixin"
+    "workarounds.context_creation.WindowMixin"
   ]
 }
