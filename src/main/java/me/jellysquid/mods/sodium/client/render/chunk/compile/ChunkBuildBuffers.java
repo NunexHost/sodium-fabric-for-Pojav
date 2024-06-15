@@ -1,22 +1,25 @@
-package me.jellysquid.mods.sodium.client.render.chunk.compile;
+package net.caffeinemc.mods.sodium.client.render.chunk.compile;
 
+import com.google.common.collect.Maps;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
-import me.jellysquid.mods.sodium.client.gl.util.VertexRange;
-import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFacing;
-import me.jellysquid.mods.sodium.client.render.chunk.compile.buffers.BakedChunkModelBuilder;
-import me.jellysquid.mods.sodium.client.render.chunk.compile.buffers.ChunkModelBuilder;
-import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
-import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionMeshParts;
-import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
-import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
-import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
-import me.jellysquid.mods.sodium.client.render.chunk.vertex.builder.ChunkMeshBufferBuilder;
-import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
-import me.jellysquid.mods.sodium.client.util.NativeBuffer;
+import net.caffeinemc.mods.sodium.client.gl.util.VertexRange;
+import net.caffeinemc.mods.sodium.client.model.quad.properties.ModelQuadFacing;
+import net.caffeinemc.mods.sodium.client.render.chunk.compile.buffers.BakedChunkModelBuilder;
+import net.caffeinemc.mods.sodium.client.render.chunk.compile.buffers.ChunkModelBuilder;
+import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
+import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionMeshParts;
+import net.caffeinemc.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
+import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import net.caffeinemc.mods.sodium.client.render.chunk.terrain.material.Material;
+import net.caffeinemc.mods.sodium.client.render.chunk.vertex.builder.ChunkMeshBufferBuilder;
+import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
+import net.caffeinemc.mods.sodium.client.util.MemoryMappedBuffer;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A collection of temporary buffers for each worker thread which will be used to build chunk meshes for given render
@@ -24,37 +27,22 @@ import java.util.List;
  * shrink a buffer.
  */
 public class ChunkBuildBuffers {
-    private final Reference2ReferenceOpenHashMap<TerrainRenderPass, BakedChunkModelBuilder> builders = new Reference2ReferenceOpenHashMap<>();
+    private final Map<TerrainRenderPass, BakedChunkModelBuilder> builders = Maps.newHashMap();
 
     private final ChunkVertexType vertexType;
-    private final int initialBufferSize; // Adjustable based on RAM
 
     public ChunkBuildBuffers(ChunkVertexType vertexType) {
         this.vertexType = vertexType;
-        this.initialBufferSize = getInitialBufferSize(); // Call helper method to determine size
 
         for (TerrainRenderPass pass : DefaultTerrainRenderPasses.ALL) {
             var vertexBuffers = new ChunkMeshBufferBuilder[ModelQuadFacing.COUNT];
 
             for (int facing = 0; facing < ModelQuadFacing.COUNT; facing++) {
-                vertexBuffers[facing] = new ChunkMeshBufferBuilder(this.vertexType, initialBufferSize);
+                vertexBuffers[facing] = new ChunkMeshBufferBuilder(this.vertexType, 128 * 1024);
             }
 
             this.builders.put(pass, new BakedChunkModelBuilder(vertexBuffers));
         }
-    }
-
-    private int getInitialBufferSize() {
-        // Adjust buffer size based on available RAM
-        Runtime runtime = Runtime.getRuntime();
-        long freeMemory = runtime.freeMemory();
-        long maxMemory = runtime.maxMemory();
-
-        // Target a reasonable portion of free memory (e.g., 25%)
-        double targetMemory = freeMemory * 0.25;
-
-        // Ensure buffer size doesn't exceed a safe limit (e.g., 512 KB)
-        return (int) Math.min(targetMemory, 512 * 1024);
     }
 
     public void init(BuiltSectionInfo.Builder renderData, int sectionIndex) {
@@ -67,10 +55,15 @@ public class ChunkBuildBuffers {
         return this.builders.get(material.pass);
     }
 
-    public BuiltSectionMeshParts createMesh(TerrainRenderPass pass) {
+    /**
+     * Creates immutable baked chunk meshes from all non-empty scratch buffers. This is used after all blocks
+     * have been rendered to pass the finished meshes over to the graphics card. This function can be called multiple
+     * times to return multiple copies.
+     */
+    public BuiltSectionMeshParts createMesh(TerrainRenderPass pass, boolean forceUnassigned) {
         var builder = this.builders.get(pass);
 
-        List<ByteBuffer> vertexBuffers = new ArrayList<>();
+        List<MemoryMappedBuffer> vertexBuffers = new ArrayList<>();
         VertexRange[] vertexRanges = new VertexRange[ModelQuadFacing.COUNT];
 
         int vertexCount = 0;
@@ -82,19 +75,10 @@ public class ChunkBuildBuffers {
                 continue;
             }
 
-            // Check if buffer is full before creating a new one
-            if (buffer.isFull()) {
-                vertexBuffers.add(buffer.slice());
-                vertexRanges[facing.ordinal()] = new VertexRange(vertexCount, buffer.count());
-                vertexCount += buffer.count();
-
-                // Allocate a new buffer with the same size
-                builder.updateVertexBuffer(facing, new ChunkMeshBufferBuilder(vertexType, initialBufferSize));
-                buffer = builder.getVertexBuffer(facing);
-            }
-
             vertexBuffers.add(buffer.slice());
-            vertexRanges[facing.ordinal()] = new VertexRange(vertexCount, buffer.count());
+            if (!forceUnassigned) {
+                vertexRanges[facing.ordinal()] = new VertexRange(vertexCount, buffer.count());
+            }
 
             vertexCount += buffer.count();
         }
@@ -103,7 +87,11 @@ public class ChunkBuildBuffers {
             return null;
         }
 
-        var mergedBuffer = new NativeBuffer(vertexCount * this.vertexType.getVertexFormat().getStride());
+        if (forceUnassigned) {
+            vertexRanges[ModelQuadFacing.UNASSIGNED.ordinal()] = new VertexRange(0, vertexCount);
+        }
+
+        var mergedBuffer = MemoryMappedBuffer.create(vertexCount * this.vertexType.getVertexFormat().getStride());
         var mergedBufferBuilder = mergedBuffer.getDirectBuffer();
 
         for (var buffer : vertexBuffers) {
