@@ -7,6 +7,9 @@ import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEn
 import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 public class CompactChunkVertex implements ChunkVertexType {
     public static final GlVertexFormat<ChunkMeshAttribute> VERTEX_FORMAT = GlVertexFormat.builder(ChunkMeshAttribute.class, 20)
             .addElement(ChunkMeshAttribute.POSITION_MATERIAL_MESH, 0, GlVertexAttributeFormat.UNSIGNED_SHORT, 4, false, true)
@@ -17,8 +20,8 @@ public class CompactChunkVertex implements ChunkVertexType {
 
     public static final int STRIDE = 20;
 
-    private static final int POSITION_MAX_VALUE = 65536;
-    private static final int TEXTURE_MAX_VALUE = 32768;
+    private static final short POSITION_MAX_VALUE = 65536;
+    private static final short TEXTURE_MAX_VALUE = 32768;
 
     private static final float MODEL_ORIGIN = 8.0f;
     private static final float MODEL_RANGE = 32.0f;
@@ -26,6 +29,14 @@ public class CompactChunkVertex implements ChunkVertexType {
     private static final float MODEL_SCALE_INV = POSITION_MAX_VALUE / MODEL_RANGE;
 
     private static final float TEXTURE_SCALE = (1.0f / TEXTURE_MAX_VALUE);
+
+    private static final ByteBuffer POSITION_SCALE_INV_BUFFER = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
+    private static final ByteBuffer TEXTURE_SCALE_BUFFER = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
+
+    static {
+        POSITION_SCALE_INV_BUFFER.putFloat(MODEL_SCALE_INV).flip();
+        TEXTURE_SCALE_BUFFER.putFloat(TEXTURE_SCALE).flip();
+    }
 
     @Override
     public float getTextureScale() {
@@ -50,17 +61,17 @@ public class CompactChunkVertex implements ChunkVertexType {
     @Override
     public ChunkVertexEncoder getEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
-            MemoryUtil.memPutShort(ptr + 0, encodePosition(vertex.x));
-            MemoryUtil.memPutShort(ptr + 2, encodePosition(vertex.y));
-            MemoryUtil.memPutShort(ptr + 4, encodePosition(vertex.z));
+            encodePosition(vertex.x, ptr + 0);
+            encodePosition(vertex.y, ptr + 2);
+            encodePosition(vertex.z, ptr + 4);
 
             MemoryUtil.memPutByte(ptr + 6, (byte) (material.bits() & 0xFF));
             MemoryUtil.memPutByte(ptr + 7, (byte) (sectionIndex & 0xFF));
 
             MemoryUtil.memPutInt(ptr + 8, vertex.color);
 
-            MemoryUtil.memPutShort(ptr + 12, encodeTexture(vertex.u));
-            MemoryUtil.memPutShort(ptr + 14, encodeTexture(vertex.v));
+            encodeTexture(vertex.u, ptr + 12);
+            encodeTexture(vertex.v, ptr + 14);
 
             MemoryUtil.memPutInt(ptr + 16, vertex.light);
 
@@ -68,11 +79,11 @@ public class CompactChunkVertex implements ChunkVertexType {
         };
     }
 
-    private static short encodePosition(float v) {
-        return (short) ((MODEL_ORIGIN + v) * MODEL_SCALE_INV);
+    private static void encodePosition(float value, long ptr) {
+        MemoryUtil.memPutShort(ptr, (short) ((MODEL_ORIGIN + value) * MODEL_SCALE_INV_BUFFER.getFloat(0)));
     }
 
-    private static short encodeTexture(float value) {
-        return (short) (Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF);
+    private static void encodeTexture(float value, long ptr) {
+        MemoryUtil.memPutShort(ptr, (short) (Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF);
     }
 }
