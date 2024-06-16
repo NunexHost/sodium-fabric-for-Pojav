@@ -73,7 +73,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         BlockPos.Mutable blockPos = new BlockPos.Mutable(minX, minY, minZ);
         BlockPos.Mutable modelOffset = new BlockPos.Mutable();
 
-        //BlockRenderContext context = new BlockRenderContext(slice);
+        BlockRenderContext context = new BlockRenderContext(slice);
 
         try {
             for (int y = minY; y < maxY; y++) {
