@@ -6,11 +6,11 @@ import org.joml.*;
 import java.util.Set;
 
 public class ModelCuboid {
-    public final int x1, y1, z1;
-    public final int x2, y2, z2;
+    public final float x1, y1, z1;
+    public final float x2, y2, z2;
 
-    public final int u0, u1, u2, u3, u4, u5;
-    public final int v0, v1, v2;
+    public final float u0, u1, u2, u3, u4, u5;
+    public final float v0, v1, v2;
 
     private final int faces;
 
@@ -21,56 +21,53 @@ public class ModelCuboid {
                        float sizeX, float sizeY, float sizeZ,
                        float extraX, float extraY, float extraZ,
                        boolean mirror,
-                       int textureWidth, int textureHeight,
-                       Direction... renderDirections) {
-        int sizeXInt = Math.round(sizeX); // Arredonde para valores inteiros
-        int sizeYInt = Math.round(sizeY);
-        int sizeZInt = Math.round(sizeZ);
+                       float textureWidth, float textureHeight,
+                       Set<Direction> renderDirections) {
+        float x2 = x1 + sizeX;
+        float y2 = y1 + sizeY;
+        float z2 = z1 + sizeZ;
 
-        int x2 = x1 + sizeXInt;
-        int y2 = y1 + sizeYInt;
-        int z2 = z1 + sizeZInt;
+        x1 -= extraX;
+        y1 -= extraY;
+        z1 -= extraZ;
 
-        x1 -= Math.round(extraX);
-        y1 -= Math.round(extraY);
-        z1 -= Math.round(extraZ);
-
-        x2 += Math.round(extraX);
-        y2 += Math.round(extraY);
-        z2 += Math.round(extraZ);
+        x2 += extraX;
+        y2 += extraY;
+        z2 += extraZ;
 
         if (mirror) {
-            int tmp = x2;
+            float tmp = x2;
             x2 = x1;
             x1 = tmp;
         }
 
-        this.x1 = x1 >> 4; // Dividir por 16 como operação bitwise
-        this.y1 = y1 >> 4;
-        this.z1 = z1 >> 4;
+        this.x1 = x1 / 16.0f;
+        this.y1 = y1 / 16.0f;
+        this.z1 = z1 / 16.0f;
 
-        this.x2 = x2 >> 4;
-        this.y2 = y2 >> 4;
-        this.z2 = z2 >> 4;
+        this.x2 = x2 / 16.0f;
+        this.y2 = y2 / 16.0f;
+        this.z2 = z2 / 16.0f;
 
-        int scaleU = textureWidth >> 16; // Evitar divisão por float
-        int scaleV = textureHeight >> 16;
+        var scaleU = 1.0f / textureWidth;
+        var scaleV = 1.0f / textureHeight;
 
-        this.u0 = u * scaleU;
-        this.u1 = (u + sizeZInt) * scaleU;
-        this.u2 = (u + sizeZInt + sizeXInt) * scaleU;
-        this.u3 = (u + sizeZInt + sizeXInt + sizeXInt) * scaleU;
-        this.u4 = (u + sizeZInt + sizeXInt + sizeZInt) * scaleU;
-        this.u5 = (u + sizeZInt + sizeXInt + sizeZInt + sizeXInt) * scaleU;
+        this.u0 = scaleU * (u);
+        this.u1 = scaleU * (u + sizeZ);
+        this.u2 = scaleU * (u + sizeZ + sizeX);
+        this.u3 = scaleU * (u + sizeZ + sizeX + sizeX);
+        this.u4 = scaleU * (u + sizeZ + sizeX + sizeZ);
+        this.u5 = scaleU * (u + sizeZ + sizeX + sizeZ + sizeX);
 
-        this.v0 = v * scaleV;
-        this.v1 = (v + sizeZInt) * scaleV;
-        this.v2 = (v + sizeZInt + sizeYInt) * scaleV;
+        this.v0 = scaleV * (v);
+        this.v1 = scaleV * (v + sizeZ);
+        this.v2 = scaleV * (v + sizeZ + sizeY);
 
         this.mirror = mirror;
 
         int faces = 0;
-        for (Direction dir : renderDirections) {
+
+        for (var dir : renderDirections) {
             faces |= 1 << dir.ordinal();
         }
 
