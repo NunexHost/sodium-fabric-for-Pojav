@@ -1,15 +1,18 @@
 package me.jellysquid.mods.sodium.client.render.chunk.compile.executor;
 
+import org.apache.commons.lang3.Validate;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.ArrayDeque;
 import java.util.Collection;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 class ChunkJobQueue {
-    private final ArrayDeque<ChunkJob> jobs = new ArrayDeque<>();
+    private final ConcurrentLinkedDeque<ChunkJob> jobs = new ConcurrentLinkedDeque<>();
 
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final Semaphore semaphore = new Semaphore(0);
 
     private final AtomicBoolean isRunning = new AtomicBoolean(true);
 
@@ -26,40 +29,65 @@ class ChunkJobQueue {
             this.jobs.addLast(job);
         }
 
-        executorService.submit(() -> processNextJob());
+        this.semaphore.release(1);
     }
 
-    private void processNextJob() {
-        if (!isRunning()) {
-            return;
+    @Nullable
+    public ChunkJob waitForNextJob() throws InterruptedException {
+        if (!this.isRunning()) {
+            return null;
         }
 
-        ChunkJob job = jobs.poll();
-        if (job != null) {
-            // Execute the job on the current thread
-            job.run();
-        }
+        this.semaphore.acquire();
+
+        return this.getNextTask();
     }
+
+    public boolean stealJob(ChunkJob job) {
+        if (!this.semaphore.tryAcquire()) {
+            return false;
+        }
+
+        var success = this.jobs.remove(job);
+
+        if (!success) {
+            // If we didn't manage to actually steal the task, then we need to release the permit which we did steal
+            this.semaphore.release(1);
+        }
+
+        return success;
+    }
+
+    @Nullable
+    private ChunkJob getNextTask() {
+        return this.jobs.poll();
+    }
+
 
     public Collection<ChunkJob> shutdown() {
-        isRunning.set(false);
+        var list = new ArrayDeque<ChunkJob>();
 
-        // Wait for the running job to finish
-        executorService.shutdown();
-        try {
-            executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        this.isRunning.set(false);
+
+        while (this.semaphore.tryAcquire()) {
+            var task = this.jobs.poll();
+
+            if (task != null) {
+                list.add(task);
+            }
         }
 
-        return jobs;
+        // force the worker threads to wake up and exit
+        this.semaphore.release(Runtime.getRuntime().availableProcessors());
+
+        return list;
     }
 
     public int size() {
-        return jobs.size();
+        return this.semaphore.availablePermits();
     }
 
     public boolean isEmpty() {
-        return size() == 0;
+        return this.size() == 0;
     }
 }
