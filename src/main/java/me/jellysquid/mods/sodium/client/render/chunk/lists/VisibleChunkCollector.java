@@ -9,7 +9,7 @@ import me.jellysquid.mods.sodium.client.render.chunk.region.RenderRegion;
 import java.util.*;
 
 public class VisibleChunkCollector implements OcclusionCuller.Visitor {
-    private final ObjectArrayList<ChunkRenderList> sortedRenderLists;
+    private final ArrayList<ChunkRenderList> sortedRenderLists;
     private final EnumMap<ChunkUpdateType, ArrayDeque<RenderSection>> sortedRebuildLists;
 
     private final int frame;
@@ -17,7 +17,7 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
     public VisibleChunkCollector(int frame) {
         this.frame = frame;
 
-        this.sortedRenderLists = new ObjectArrayList<>();
+        this.sortedRenderLists = new ArrayList<>();
         this.sortedRebuildLists = new EnumMap<>(ChunkUpdateType.class);
 
         for (var type : ChunkUpdateType.values()) {
@@ -57,11 +57,11 @@ public class VisibleChunkCollector implements OcclusionCuller.Visitor {
         }
     }
 
-    public SortedRenderLists createRenderLists() {
+    public SortedRenderLists getVisibleRenderLists() {
         return new SortedRenderLists(this.sortedRenderLists);
     }
 
     public Map<ChunkUpdateType, ArrayDeque<RenderSection>> getRebuildLists() {
-        return this.sortedRebuildLists;
+        return Collections.unmodifiableMap(this.sortedRebuildLists); // Return immutable copy
     }
 }
