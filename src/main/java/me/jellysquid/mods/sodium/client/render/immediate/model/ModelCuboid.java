@@ -3,54 +3,81 @@ package me.jellysquid.mods.sodium.client.render.immediate.model;
 import net.minecraft.util.math.Direction;
 import org.joml.*;
 
-import java.util.BitSet;
+import java.util.Set;
 
 public class ModelCuboid {
-    private final float x1, y1, z1;
-    private final float x2, y2, z2;
+    public final int x1, y1, z1;
+    public final int x2, y2, z2;
 
-    private final float u0, u1, u2, u3, u4, u5;
-    private final float v0, v1, v2;
+    public final int u0, u1, u2, u3, u4, u5;
+    public final int v0, v1, v2;
 
-    private final BitSet faces;
+    private final int faces;
 
-    private final boolean mirror;
+    public final boolean mirror;
 
     public ModelCuboid(int u, int v,
                        float x1, float y1, float z1,
                        float sizeX, float sizeY, float sizeZ,
                        float extraX, float extraY, float extraZ,
                        boolean mirror,
-                       float textureWidth, float textureHeight,
-                       BitSet renderDirections) {
-        this.x1 = x1 / 16.0f;
-        this.y1 = y1 / 16.0f;
-        this.z1 = z1 / 16.0f;
+                       int textureWidth, int textureHeight,
+                       Direction... renderDirections) {
+        int sizeXInt = Math.round(sizeX); // Arredonde para valores inteiros
+        int sizeYInt = Math.round(sizeY);
+        int sizeZInt = Math.round(sizeZ);
 
-        this.x2 = (x1 + sizeX) / 16.0f;
-        this.y2 = (y1 + sizeY) / 16.0f;
-        this.z2 = (z1 + sizeZ) / 16.0f;
+        int x2 = x1 + sizeXInt;
+        int y2 = y1 + sizeYInt;
+        int z2 = z1 + sizeZInt;
 
-        float scaleU = 1.0f / textureWidth;
-        float scaleV = 1.0f / textureHeight;
+        x1 -= Math.round(extraX);
+        y1 -= Math.round(extraY);
+        z1 -= Math.round(extraZ);
 
-        this.u0 = scaleU * u;
-        this.u1 = scaleU * (u + sizeZ);
-        this.u2 = scaleU * (u + sizeZ + sizeX);
-        this.u3 = scaleU * (u + sizeZ + sizeX + sizeX);
-        this.u4 = scaleU * (u + sizeZ + sizeX + sizeZ);
-        this.u5 = scaleU * (u + sizeZ + sizeX + sizeZ + sizeX);
+        x2 += Math.round(extraX);
+        y2 += Math.round(extraY);
+        z2 += Math.round(extraZ);
 
-        this.v0 = scaleV * v;
-        this.v1 = scaleV * (v + sizeZ);
-        this.v2 = scaleV * (v + sizeZ + sizeY);
+        if (mirror) {
+            int tmp = x2;
+            x2 = x1;
+            x1 = tmp;
+        }
+
+        this.x1 = x1 >> 4; // Dividir por 16 como operação bitwise
+        this.y1 = y1 >> 4;
+        this.z1 = z1 >> 4;
+
+        this.x2 = x2 >> 4;
+        this.y2 = y2 >> 4;
+        this.z2 = z2 >> 4;
+
+        int scaleU = textureWidth >> 16; // Evitar divisão por float
+        int scaleV = textureHeight >> 16;
+
+        this.u0 = u * scaleU;
+        this.u1 = (u + sizeZInt) * scaleU;
+        this.u2 = (u + sizeZInt + sizeXInt) * scaleU;
+        this.u3 = (u + sizeZInt + sizeXInt + sizeXInt) * scaleU;
+        this.u4 = (u + sizeZInt + sizeXInt + sizeZInt) * scaleU;
+        this.u5 = (u + sizeZInt + sizeXInt + sizeZInt + sizeXInt) * scaleU;
+
+        this.v0 = v * scaleV;
+        this.v1 = (v + sizeZInt) * scaleV;
+        this.v2 = (v + sizeZInt + sizeYInt) * scaleV;
 
         this.mirror = mirror;
 
-        this.faces = renderDirections;
+        int faces = 0;
+        for (Direction dir : renderDirections) {
+            faces |= 1 << dir.ordinal();
+        }
+
+        this.faces = faces;
     }
 
     public boolean shouldDrawFace(int quadIndex) {
-        return faces.get(quadIndex);
+        return (this.faces & (1 << quadIndex)) != 0;
     }
 }
