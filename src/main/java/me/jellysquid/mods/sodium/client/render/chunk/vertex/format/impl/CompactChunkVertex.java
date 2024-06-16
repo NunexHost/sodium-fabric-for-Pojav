@@ -22,10 +22,8 @@ public class CompactChunkVertex implements ChunkVertexType {
 
     private static final float MODEL_ORIGIN = 8.0f;
     private static final float MODEL_RANGE = 32.0f;
-    private static final float MODEL_SCALE = MODEL_RANGE / POSITION_MAX_VALUE;
-    private static final float MODEL_SCALE_INV = POSITION_MAX_VALUE / MODEL_RANGE;
-
-    private static final float TEXTURE_SCALE = (1.0f / TEXTURE_MAX_VALUE);
+    private static final float MODEL_SCALE_INV = MODEL_RANGE / POSITION_MAX_VALUE;
+    private static final float TEXTURE_SCALE = 1.0f / TEXTURE_MAX_VALUE;
 
     @Override
     public float getTextureScale() {
@@ -34,7 +32,7 @@ public class CompactChunkVertex implements ChunkVertexType {
 
     @Override
     public float getPositionScale() {
-        return MODEL_SCALE;
+        return 1.0f / MODEL_SCALE_INV; // Inverted scale for direct conversion
     }
 
     @Override
@@ -50,29 +48,21 @@ public class CompactChunkVertex implements ChunkVertexType {
     @Override
     public ChunkVertexEncoder getEncoder() {
         return (ptr, material, vertex, sectionIndex) -> {
-            MemoryUtil.memPutShort(ptr + 0, encodePosition(vertex.x));
-            MemoryUtil.memPutShort(ptr + 2, encodePosition(vertex.y));
-            MemoryUtil.memPutShort(ptr + 4, encodePosition(vertex.z));
+            ptr[0] = (short) ((MODEL_ORIGIN + vertex.x) * MODEL_SCALE_INV);
+            ptr[1] = (short) ((MODEL_ORIGIN + vertex.y) * MODEL_SCALE_INV);
+            ptr[2] = (short) ((MODEL_ORIGIN + vertex.z) * MODEL_SCALE_INV);
 
-            MemoryUtil.memPutByte(ptr + 6, (byte) (material.bits() & 0xFF));
-            MemoryUtil.memPutByte(ptr + 7, (byte) (sectionIndex & 0xFF));
+            ptr[3] = (byte) (material.bits() & 0xFF);
+            ptr[4] = (byte) (sectionIndex & 0xFF);
 
-            MemoryUtil.memPutInt(ptr + 8, vertex.color);
+            ptr[5] = vertex.color;
 
-            MemoryUtil.memPutShort(ptr + 12, encodeTexture(vertex.u));
-            MemoryUtil.memPutShort(ptr + 14, encodeTexture(vertex.v));
+            ptr[6] = (short) (Math.floor(vertex.u * TEXTURE_MAX_VALUE) & 0xFFFF);
+            ptr[7] = (short) (Math.floor(vertex.v * TEXTURE_MAX_VALUE) & 0xFFFF);
 
-            MemoryUtil.memPutInt(ptr + 16, vertex.light);
+            ptr[8] = vertex.light;
 
             return ptr + STRIDE;
         };
-    }
-
-    private static short encodePosition(float v) {
-        return (short) ((MODEL_ORIGIN + v) * MODEL_SCALE_INV);
-    }
-
-    private static short encodeTexture(float value) {
-        return (short) (Math.round(value * TEXTURE_MAX_VALUE) & 0xFFFF);
     }
 }
