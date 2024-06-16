@@ -53,9 +53,7 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
                     .attachShader(vertShader)
                     .attachShader(fragShader)
                     .bindAttribute("a_PosId", ChunkShaderBindingPoints.ATTRIBUTE_POSITION_ID)
-                    .bindAttribute("a_Color", ChunkShaderBindingPoints.ATTRIBUTE_COLOR)
-                    .bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_BLOCK_TEXTURE)
-                    .bindAttribute("a_LightCoord", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_TEXTURE)
+                    .bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_BLOCK_TEXTURE) // Removed color and light attributes
                     .bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR)
                     .link((shader) -> new ChunkShaderInterface(shader, options));
         } finally {
