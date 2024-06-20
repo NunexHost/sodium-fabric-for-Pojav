@@ -1,46 +1,37 @@
 package me.jellysquid.mods.sodium.client.gl.array;
 
-import me.jellysquid.mods.sodium.client.gl.GlObject;
-import org.lwjgl.opengl.GL11;
+import javax.microedition.khronos.opengles.GL10;
 
 /**
- * Provides Vertex Array functionality emulation on OpenGL 2.0
+ * Provides Vertex Array functionality on supported platforms.
  */
-public class GlVertexArray extends GlObject {
+public class GlVertexArray {
     public static final int NULL_ARRAY_ID = 0;
-
-    private int currentVbo = -1; // Track the currently bound VBO
+    private int handle;
 
     public GlVertexArray() {
-        // Not required for emulating VAOs in OpenGL 2.0
+        handle = createVertexArray();
     }
 
-    @Override
+    public int getHandle() {
+        return handle;
+    }
+
+    private int createVertexArray() {
+        int[] array = new int[1];
+        GLES20.glGenVertexArrays(1, array, 0);
+        return array[0];
+    }
+
     public void bind() {
-        // No binding needed for emulated VAOs
+        GLES20.glBindVertexArray(handle);
     }
 
-    @Override
     public void unbind() {
-        // No unbinding needed for emulated VAOs
+        GLES20.glBindVertexArray(NULL_ARRAY_ID);
     }
 
-    @Override
     public void delete() {
-        // No object to delete for emulated VAOs
+        GLES20.glDeleteVertexArrays(1, new int[] { handle }, 0);
     }
-
-    /**
-     * Binds a vertex buffer to this emulated vertex array.
-     * 
-     * @param vboId The ID of the vertex buffer object to bind
-     */
-    public void bindVertexBuffer(int vboId) {
-        if (currentVbo != vboId) {
-            GL11.glBindBuffer(GL11.GL_ARRAY_BUFFER, vboId);
-            currentVbo = vboId;
-        }
-    }
-
-    // You can add similar methods for binding other vertex attribute types (e.g., element arrays)
 }
