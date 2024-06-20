@@ -22,7 +22,7 @@ public class GlVertexArray {
      */
     public static void bindVertexBuffer(int attribute, long vbo, int stride, int offset) {
         GL11.glBindBuffer(GL11.GL_ARRAY_BUFFER, (int) vbo);
-        GL11.glVertexAttribPointer(attribute, /* num components */, GL11.GL_FLOAT, /* normalized? */, stride, offset);
+        GL11.glVertexAttribPointer(attribute, GL11.GL_FLOAT, stride, offset);
     }
 
     /**
