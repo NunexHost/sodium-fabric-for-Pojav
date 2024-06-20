@@ -14,28 +14,34 @@ import java.util.Map;
  */
 public class ChunkBuildOutput {
     public final RenderSection render;
-
     public final BuiltSectionInfo info;
     public final Map<TerrainRenderPass, BuiltSectionMeshParts> meshes;
-
     public final int buildTime;
 
     public ChunkBuildOutput(RenderSection render, BuiltSectionInfo info, Map<TerrainRenderPass, BuiltSectionMeshParts> meshes, int buildTime) {
         this.render = render;
         this.info = info;
         this.meshes = meshes;
-
         this.buildTime = buildTime;
     }
 
+    /**
+     * Retrieves the mesh data for the specified render pass.
+     *
+     * @param pass The render pass to retrieve mesh data for.
+     * @return The mesh data for the specified render pass.
+     */
     public BuiltSectionMeshParts getMesh(TerrainRenderPass pass) {
-        return this.meshes.get(pass);
+        return meshes.get(pass);
     }
 
+    /**
+     * Deletes this chunk build output, freeing allocated resources.
+     * Should be called when this output is no longer needed.
+     */
     public void delete() {
-        for (BuiltSectionMeshParts data : this.meshes.values()) {
-            data.getVertexData()
-                    .free();
+        for (BuiltSectionMeshParts meshParts : meshes.values()) {
+            meshParts.getVertexData().free();
         }
     }
 }
