@@ -79,21 +79,21 @@ public class ChunkBuilder {
     }
 
     public <TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT> ChunkJobTyped<TASK, OUTPUT> scheduleTask(TASK task, boolean important,
-                                                                                                    Consumer<ChunkJobResult<OUTPUT>> consumer)
-    {
-        Validate.notNull(task, "Task must be non-null");
+                                                                                                Consumer<ChunkJobResult<OUTPUT>> consumer)
+{
+    Validate.notNull(task, "Task must be non-null");
 
-        if (this.executor.isShutdown()) {
-            throw new IllegalStateException("Executor is stopped");
-        }
-
-        var job = new ChunkJobTyped<>(task, consumer);
-
-        this.queue.add(job, important);
-
-        return job;
+    if (this.executor.isShutdown()) {
+        throw new IllegalStateException("Executor is stopped");
     }
 
+    var job = new ChunkJobTyped<>(task, consumer);
+
+    this.queue.add(job, important);
+
+    return job;
+}
+    
     /**
      * Returns the "optimal" number of threads to be used for chunk build tasks. This will always return at least one
      * thread.
