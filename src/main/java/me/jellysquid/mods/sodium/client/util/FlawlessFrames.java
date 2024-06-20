@@ -20,13 +20,12 @@ import java.util.function.Function;
 public class FlawlessFrames {
     private static final Set<Object> ACTIVE = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-    @SuppressWarnings("unchecked")
     public static void onClientInitialization() {
         Function<String, Consumer<Boolean>> provider = name -> {
             Object token = new Object();
             return active -> {
                 if (active) {
-                    ACTIVE.add(token);
+                    ACTIVE.computeIfAbsent(token, k -> token);
                 } else {
                     ACTIVE.remove(token);
                 }
@@ -34,7 +33,7 @@ public class FlawlessFrames {
         };
         FabricLoader.getInstance()
                 .getEntrypoints("frex_flawless_frames", Consumer.class)
-                .forEach(api -> api.accept(provider));
+                .forEach(api -> api.accept(provider.apply("someName")));
     }
 
     public static boolean isActive() {
