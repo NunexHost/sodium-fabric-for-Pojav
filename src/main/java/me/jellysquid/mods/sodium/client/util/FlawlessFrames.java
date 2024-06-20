@@ -25,7 +25,7 @@ public class FlawlessFrames {
             Object token = new Object();
             return active -> {
                 if (active) {
-                    ACTIVE.computeIfAbsent(token, k -> token);
+                    ACTIVE.add(token);
                 } else {
                     ACTIVE.remove(token);
                 }
