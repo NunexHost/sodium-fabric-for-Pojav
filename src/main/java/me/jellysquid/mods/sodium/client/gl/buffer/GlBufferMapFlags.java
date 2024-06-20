@@ -1,13 +1,13 @@
 package me.jellysquid.mods.sodium.client.gl.buffer;
 
 import me.jellysquid.mods.sodium.client.gl.util.EnumBit;
+import org.lwjgl.opengl.GL11;
 
 public enum GlBufferMapFlags implements EnumBit {
-    READ(0x0001), // GL_READ_ONLY_ARB
-    WRITE(0x0002), // GL_WRITE_ONLY_ARB
-    INVALIDATE_BUFFER(0x0008), // GL_INVALIDATE_BUFFER
-    INVALIDATE_RANGE(0x0004), // GL_INVALIDATE_RANGE
-    UNSYNCHRONIZED(0x0020); // GL_MAP_UNSYNCHRONIZED_BIT is not available in OpenGL 2.0
+    READ(GL11.GL_MAP_READ_BIT),
+    WRITE(GL11.GL_MAP_WRITE_BIT),
+    INVALIDATE_BUFFER(GL11.GL_MAP_INVALIDATE_BUFFER_BIT),
+    INVALIDATE_RANGE(GL11.GL_MAP_INVALIDATE_RANGE_BIT);
 
     private final int bit;
 
