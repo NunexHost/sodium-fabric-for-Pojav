@@ -9,6 +9,7 @@ import org.lwjgl.opengl.GL15;
  */
 public class GlVertexArray extends GlObject {
     private int vboId;
+    public static final int NULL_ARRAY_ID = 0;
 
     public GlVertexArray() {
         // Generate a Vertex Buffer Object (VBO) for vertex data
