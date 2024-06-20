@@ -80,7 +80,7 @@ public class ChunkBuilder {
 
     public <TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT> ChunkJobTyped<TASK, OUTPUT> scheduleTask(TASK task, boolean important,
                                                                                                 //Consumer<ChunkJobResult<OUTPUT>> consumer)
-{
+//{
     Validate.notNull(task, "Task must be non-null");
 
     if (this.executor.isShutdown()) {
