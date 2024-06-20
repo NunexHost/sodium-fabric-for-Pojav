@@ -13,28 +13,36 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class ChunkBuilder {
     static final Logger LOGGER = LogManager.getLogger("ChunkBuilder");
 
     private final ChunkJobQueue queue = new ChunkJobQueue();
 
-    private final ExecutorService executor;
+    private final List<Thread> threads = new ArrayList<>();
+
+    private final AtomicInteger busyThreadCount = new AtomicInteger();
 
     private final ChunkBuildContext localContext;
 
     public ChunkBuilder(ClientWorld world, ChunkVertexType vertexType) {
-        int threadCount = getThreadCount();
-        this.executor = Executors.newFixedThreadPool(threadCount);
+        int count = getThreadCount();
 
-        for (int i = 0; i < threadCount; i++) {
+        for (int i = 0; i < count; i++) {
             ChunkBuildContext context = new ChunkBuildContext(world, vertexType);
             WorkerRunnable worker = new WorkerRunnable(context);
-            this.executor.submit(worker);
+
+            Thread thread = new Thread(worker, "Chunk Render Task Executor #" + i);
+            thread.setPriority(Math.max(0, Thread.NORM_PRIORITY - 2));
+            thread.start();
+
+            this.threads.add(thread);
         }
 
-        LOGGER.info("Started {} worker threads", threadCount);
+        LOGGER.info("Started {} worker threads", this.threads.size());
 
         this.localContext = new ChunkBuildContext(world, vertexType);
     }
@@ -44,56 +52,61 @@ public class ChunkBuilder {
      * spawn more tasks than the budget allows, it will block until resources become available.
      */
     public int getSchedulingBudget() {
-        return Math.max(0, this.executor instanceof ThreadPoolExecutor ?
-                ((ThreadPoolExecutor) this.executor).getQueue().remainingCapacity() : Integer.MAX_VALUE);
+        return Math.max(0, this.threads.size() - this.queue.size());
     }
 
     /**
-     * Notifies all worker threads to stop and blocks until all workers terminate. After the workers have been shut
+     * <p>Notifies all worker threads to stop and blocks until all workers terminate. After the workers have been shut
      * down, all tasks are cancelled and the pending queues are cleared. If the builder is already stopped, this
-     * method does nothing and exits.
+     * method does nothing and exits.</p>
+     *
+     * <p>After shutdown, all previously scheduled jobs will have been cancelled. Jobs that finished while
+     * waiting for worker threads to shut down will still have their results processed for later cleanup.</p>
      */
     public void shutdown() {
-        if (this.executor.isShutdown()) {
-            return;
+        if (!this.queue.isRunning()) {
+            throw new IllegalStateException("Worker threads are not running");
         }
 
-        this.executor.shutdown();
-        try {
-            if (!this.executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                this.executor.shutdownNow();
-                if (!this.executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    LOGGER.error("ChunkBuilder executor did not terminate");
-                }
-            }
-        } catch (InterruptedException ie) {
-            this.executor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-
-        // Clear any remaining jobs in the queue
+        // Delete any queued tasks and resources attached to them
         var jobs = this.queue.shutdown();
-        jobs.forEach(ChunkJob::setCancelled);
 
-        LOGGER.info("Stopped worker threads");
+        for (var job : jobs) {
+            job.setCancelled();
+        }
+
+        this.shutdownThreads();
+    }
+
+    private void shutdownThreads() {
+        LOGGER.info("Stopping worker threads");
+
+        // Wait for every remaining thread to terminate
+        for (Thread thread : this.threads) {
+            try {
+                thread.join();
+            } catch (InterruptedException ignored) { }
+        }
+
+        this.threads.clear();
     }
 
     public <TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT> ChunkJobTyped<TASK, OUTPUT> scheduleTask(TASK task, boolean important,
-                                                                                                //Consumer<ChunkJobResult<OUTPUT>> consumer)
-//{
-    Validate.notNull(task, "Task must be non-null");
+                                                                                                    Consumer<ChunkJobResult<OUTPUT>> consumer)
+    {
+        Validate.notNull(task, "Task must be non-null");
 
-    if (this.executor.isShutdown()) {
-        throw new IllegalStateException("Executor is stopped");
+        if (!this.queue.isRunning()) {
+            throw new IllegalStateException("Executor is stopped");
+        }
+
+        var job = new ChunkJobTyped<>(task, consumer);
+
+        this.queue.add(job, important);
+
+        return job;
     }
 
-    var job = new ChunkJobTyped<>(task, consumer);
-
-    this.queue.add(job, important);
-
-    return job;
-}
-    
     /**
      * Returns the "optimal" number of threads to be used for chunk build tasks. This will always return at least one
      * thread.
@@ -134,22 +147,16 @@ public class ChunkBuilder {
     }
 
     public int getBusyThreadCount() {
-        if (this.executor instanceof ThreadPoolExecutor) {
-            return ((ThreadPoolExecutor) this.executor).getActiveCount();
-        } else {
-            return 0;
-        }
+        return this.busyThreadCount.get();
     }
 
     public int getTotalThreadCount() {
-        if (this.executor instanceof ThreadPoolExecutor) {
-            return ((ThreadPoolExecutor) this.executor).getMaximumPoolSize();
-        } else {
-            return 0;
-        }
+        return this.threads.size();
     }
 
     private class WorkerRunnable implements Runnable {
+        // Making this thread-local provides a small boost to performance by avoiding the overhead in synchronizing
+        // caches between different CPU cores
         private final ChunkBuildContext context;
 
         public WorkerRunnable(ChunkBuildContext context) {
@@ -158,24 +165,29 @@ public class ChunkBuilder {
 
         @Override
         public void run() {
-            while (!Thread.currentThread().isInterrupted() && !executor.isShutdown()) {
+            // Run until the chunk builder shuts down
+            while (ChunkBuilder.this.queue.isRunning()) {
                 ChunkJob job;
 
                 try {
-                    job = queue.waitForNextJob();
+                    job = ChunkBuilder.this.queue.waitForNextJob();
                 } catch (InterruptedException ignored) {
-                    Thread.currentThread().interrupt();
                     continue;
                 }
 
                 if (job == null) {
+                    // might mean we are not running anymore... go around and check isRunning
                     continue;
                 }
+
+                ChunkBuilder.this.busyThreadCount.getAndIncrement();
 
                 try {
                     job.execute(this.context);
                 } finally {
                     this.context.cleanup();
+
+                    ChunkBuilder.this.busyThreadCount.decrementAndGet();
                 }
             }
         }
